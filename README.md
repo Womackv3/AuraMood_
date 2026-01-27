@@ -55,7 +55,7 @@ Perfect for anyone who wants detailed mood tracking without sacrificing privacy 
 
 ## Screenshots
 
-> 📸 Screenshots coming soon! The app features a cyberpunk-inspired dark theme with glassmorphism effects, circular mood sliders, and interactive data visualization.
+<img width="1297" height="1054" alt="image" src="https://github.com/user-attachments/assets/299134e0-01a1-4af8-85c2-8e488c3c535e" />
 
 ## Tech Stack
 
