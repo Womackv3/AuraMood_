@@ -1,0 +1,60 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// Core Mood Entry
+model MoodEntry {
+  id               String            @id @default(uuid())
+  timestamp        DateTime          @default(now())
+  moodLevel        Int               // 1-10 scale
+  anxietyLevel     Int?
+  irritabilityLevel Int?
+  sleepHours       Float?
+  notes            String?
+  weatherSnapshot  WeatherSnapshot?
+
+  @@map("mood_entries")
+}
+
+// Medication Definitions
+model Medication {
+  id           String    @id @default(uuid())
+  name         String
+  dosage       String?
+  scheduleTime String?   // Stored as text in SQLite (HH:MM format)
+  medLogs      MedLog[]
+
+  @@map("medications")
+}
+
+// Medication Adherence Logs
+model MedLog {
+  id            String      @id @default(uuid())
+  medicationId  String
+  takenAt       DateTime?
+  status        String      // 'taken', 'missed', 'late'
+  medication    Medication  @relation(fields: [medicationId], references: [id], onDelete: Cascade)
+
+  @@map("med_logs")
+}
+
+// Environmental Context (Weather)
+model WeatherSnapshot {
+  id            String    @id @default(uuid())
+  entryId       String    @unique
+  tempF         Float?
+  cloudCoverPct Int?
+  rainMm        Float?    // Precipitation in millimeters
+  moonPhase     String?
+  moodEntry     MoodEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+
+  @@map("weather_snapshots")
+}
