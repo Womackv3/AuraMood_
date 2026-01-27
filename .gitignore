@@ -45,6 +45,10 @@ next-env.d.ts
 # Database
 *.db
 *.db-journal
+prisma/*.db
+data/
+nginx/certs/
+*.db-journal
 data/
 
 # IDEs

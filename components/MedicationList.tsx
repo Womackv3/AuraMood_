@@ -27,8 +27,8 @@ export default function MedicationList() {
   const fetchMedications = async () => {
     try {
       const [medsResponse, logsResponse] = await Promise.all([
-        fetch("/api/medications"),
-        fetch("/api/med-logs?limit=100"),
+        fetch("/auramoods/api/medications"),
+        fetch("/auramoods/api/med-logs?limit=100"),
       ]);
 
       if (medsResponse.ok && logsResponse.ok) {
@@ -70,7 +70,7 @@ export default function MedicationList() {
       const status = newStatus ? "taken" : "missed";
 
       // Log to API
-      const response = await fetch("/api/med-logs", {
+      const response = await fetch("/auramoods/api/med-logs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ medicationId: id, status }),
@@ -92,7 +92,7 @@ export default function MedicationList() {
   };
 
   const handleAddMedication = async (medication: { name: string; dosage: string; scheduleTime: string }) => {
-    const response = await fetch("/api/medications", {
+    const response = await fetch("/auramoods/api/medications", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(medication),
@@ -107,7 +107,7 @@ export default function MedicationList() {
   };
 
   const handleUpdateMedication = async (id: string, medication: { name: string; dosage: string; scheduleTime: string }) => {
-    const response = await fetch(`/api/medications/${id}`, {
+    const response = await fetch(`/auramoods/api/medications/${id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(medication),
@@ -128,7 +128,7 @@ export default function MedicationList() {
     if (!confirm("Are you sure you want to remove this medication?")) return;
 
     try {
-      const response = await fetch(`/api/medications/${id}`, {
+      const response = await fetch(`/auramoods/api/medications/${id}`, {
         method: "DELETE",
       });
 

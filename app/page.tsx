@@ -8,8 +8,8 @@ import CyberpunkHeading from "@/components/CyberpunkHeading";
 
 export default function Home() {
   return (
-    <main className="min-h-screen px-6 py-6 sm:px-8 md:px-12 pb-8">
-      <div className="max-w-7xl mx-auto">
+    <main className="min-h-screen w-full flex justify-center py-8">
+      <div className="w-full max-w-7xl px-6 sm:px-8 md:px-12">
         {/* Header */}
         <div className="relative flex items-center justify-center mb-4 sm:mb-6 md:mb-8">
           <div className="text-center">

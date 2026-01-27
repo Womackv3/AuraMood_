@@ -10,6 +10,7 @@
     "db:push": "prisma db push",
     "db:studio": "prisma studio",
     "db:generate": "prisma generate",
+    "db:seed": "tsx scripts/seed-fake-data.ts",
     "docker:build": "docker build -t aura-mood .",
     "docker:up": "docker-compose up -d"
   },
@@ -35,6 +36,7 @@
   },
   "devDependencies": {
     "dotenv": "^17.2.3",
-    "prisma": "^6.19.2"
+    "prisma": "^6.19.2",
+    "tsx": "^4.19.2"
   }
 }

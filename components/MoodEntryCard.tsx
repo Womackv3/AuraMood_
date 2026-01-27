@@ -30,18 +30,29 @@ export default function MoodEntryCard() {
           });
 
           const { latitude, longitude } = position.coords;
-          const weatherResponse = await fetch(`/api/weather?lat=${latitude}&lon=${longitude}`);
+          const weatherResponse = await fetch(`/auramoods/api/weather?lat=${latitude}&lon=${longitude}`);
 
           if (weatherResponse.ok) {
             weatherData = await weatherResponse.json();
           }
-        } catch (weatherError) {
+        } catch (weatherError: any) {
           console.warn("Failed to capture weather data:", weatherError);
+
+          let errorMsg = "Could not capture weather location.";
+          if (window.isSecureContext === false && window.location.hostname !== 'localhost') {
+            errorMsg = "Weather capture requires HTTPS on other devices.";
+          }
+
+          addToast({
+            type: "error", // Using error or info to warn user without blocking submission
+            message: errorMsg + " Saving entry without weather.",
+            duration: 4000,
+          });
           // Continue with mood entry even if weather fails
         }
       }
 
-      const response = await fetch("/api/mood", {
+      const response = await fetch("/auramoods/api/mood", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -102,7 +113,9 @@ export default function MoodEntryCard() {
       const isAM = now.getHours() < 12;
       setPeriodLabel(isAM ? "Morning" : "Evening");
 
-      const response = await fetch("/api/mood?limit=5");
+      setPeriodLabel(isAM ? "Morning" : "Evening");
+
+      const response = await fetch("/auramoods/api/mood?limit=5");
       if (response.ok) {
         const entries: any[] = await response.json();
 
@@ -239,14 +252,12 @@ export default function MoodEntryCard() {
             <button
               type="button"
               onClick={() => setCaptureWeather(!captureWeather)}
-              className={`relative w-11 h-6 rounded-full transition-colors ${
-                captureWeather ? "bg-aura-purple" : "bg-aura-slate-700"
-              }`}
+              className={`relative w-11 h-6 rounded-full transition-colors ${captureWeather ? "bg-aura-purple" : "bg-aura-slate-700"
+                }`}
             >
               <span
-                className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${
-                  captureWeather ? "translate-x-5" : "translate-x-0"
-                }`}
+                className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${captureWeather ? "translate-x-5" : "translate-x-0"
+                  }`}
               />
             </button>
           </div>

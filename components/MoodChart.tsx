@@ -35,12 +35,16 @@ interface MoodEntry {
 interface ChartData {
   id: string; // Add ID for unique key
   date: string;
-  mood: number;
-  anxiety: number | null;
-  irritability: number | null;
-  sleep: number;
+  // Split mood metrics by AM/PM
+  moodAM: number | null;
+  moodPM: number | null;
+  anxietyAM: number | null;
+  anxietyPM: number | null;
+  irritabilityAM: number | null;
+  irritabilityPM: number | null;
   sleepAM: number | null;
   sleepPM: number | null;
+  isAM: boolean; // Track if entry is AM or PM for dot styling
   weather: string | null;
   temp: number | null;
   rain: number | null;
@@ -49,6 +53,7 @@ interface ChartData {
 export default function MoodChart() {
   const [chartData, setChartData] = useState<ChartData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<'AM' | 'PM'>('AM');
 
   useEffect(() => {
     fetchMoodData();
@@ -57,39 +62,77 @@ export default function MoodChart() {
   const fetchMoodData = async () => {
     try {
       // Fetch up to 3 months of data (90 days * 2 entries/day = 180)
-      const response = await fetch("/api/mood?limit=180");
+      const response = await fetch("/auramoods/api/mood?limit=180");
       if (response.ok) {
         const moodEntries: MoodEntry[] = await response.json();
 
-        // Transform API data to chart format
-        const transformed = moodEntries.reverse().map((entry) => {
+        // Group data by date
+        const groupedData = new Map<string, ChartData>();
+
+        moodEntries.forEach((entry) => {
           const date = new Date(entry.timestamp);
           const formattedDate = date.toLocaleDateString("en-US", {
             month: "short",
             day: "numeric",
           });
-          const time = date.toLocaleTimeString("en-US", {
-            hour: "numeric",
-            minute: "2-digit",
-          });
+          // Use formatted date as key to group AM/PM same day
+          const key = formattedDate;
 
+          if (!groupedData.has(key)) {
+            groupedData.set(key, {
+              id: key, // Use date as ID for the x-axis
+              date: formattedDate,
+              moodAM: null,
+              moodPM: null,
+              anxietyAM: null,
+              anxietyPM: null,
+              irritabilityAM: null,
+              irritabilityPM: null,
+              sleepAM: null,
+              sleepPM: null,
+              isAM: false, // Not strictly needed for grouped
+              weather: null,
+              temp: null,
+              rain: null,
+            });
+          }
+
+          const dayData = groupedData.get(key)!;
           const isAM = date.getHours() < 12;
           const sleepHours = entry.sleepHours || 0;
 
-          return {
-            id: entry.id,
-            date: `${formattedDate} ${time}`,
-            mood: entry.moodLevel,
-            anxiety: entry.anxietyLevel,
-            irritability: entry.irritabilityLevel,
-            sleep: sleepHours,
-            sleepAM: isAM ? sleepHours : null,
-            sleepPM: isAM ? null : sleepHours,
-            weather: entry.weatherSnapshot?.moonPhase || null,
-            temp: entry.weatherSnapshot?.tempF || null,
-            rain: entry.weatherSnapshot?.rainMm || null,
-          };
+          if (isAM) {
+            dayData.moodAM = entry.moodLevel;
+            dayData.anxietyAM = entry.anxietyLevel;
+            dayData.irritabilityAM = entry.irritabilityLevel;
+            dayData.sleepAM = sleepHours;
+            // Prefer AM weather for the "day" representation if needed, or just overwrite
+            if (!dayData.weather) {
+              dayData.weather = entry.weatherSnapshot?.moonPhase || null;
+              dayData.temp = entry.weatherSnapshot?.tempF || null;
+              dayData.rain = entry.weatherSnapshot?.rainMm || null;
+            }
+          } else {
+            dayData.moodPM = entry.moodLevel;
+            dayData.anxietyPM = entry.anxietyLevel;
+            dayData.irritabilityPM = entry.irritabilityLevel;
+            dayData.sleepPM = sleepHours;
+            // If AM weather wasn't there, take PM
+            if (!dayData.weather) {
+              dayData.weather = entry.weatherSnapshot?.moonPhase || null;
+              dayData.temp = entry.weatherSnapshot?.tempF || null;
+              dayData.rain = entry.weatherSnapshot?.rainMm || null;
+            }
+          }
         });
+
+        // Convert to array and reverse to show oldest to newest (actually API returns desc, so we need reverse)
+        // Wait, map iteration order is insertion order?
+        // Let's just create array and sort or reverse.
+        // The API returns desc (newest first). We iterate.
+        // Map will allow us to merge.
+        // Then we assume the order might be newest first.
+        const transformed = Array.from(groupedData.values()).reverse();
 
         setChartData(transformed);
       }
@@ -101,13 +144,15 @@ export default function MoodChart() {
   };
 
   const getTickLabel = (id: any) => {
+    // ID is now the date string "Jan 23", so we can just return it
+    // Or if we want to be safe, find the item
     const item = chartData.find((d) => d.id === id);
-    return item ? item.date.split(" ")[0] + " " + item.date.split(" ")[1] : "";
+    return item ? item.date : id;
   };
 
   const getTooltipLabel = (id: any) => {
     const item = chartData.find((d) => d.id === id);
-    return item ? item.date : "";
+    return item ? item.date : id;
   };
 
   if (isLoading) {
@@ -140,6 +185,28 @@ export default function MoodChart() {
       <div className="flex items-center justify-between mb-4 sm:mb-5 md:mb-6">
         <h2 className="text-lg sm:text-xl md:text-2xl font-bold text-white">Mood & Sleep Trends</h2>
         <p className="text-xs text-gray-400">Last 3 months</p>
+      </div>
+
+      {/* AM/PM Tab Switcher */}
+      <div className="flex items-center justify-center gap-2 mb-4 sm:mb-5">
+        <button
+          onClick={() => setActiveTab('AM')}
+          className={`px-6 py-2 rounded-lg font-semibold transition-all ${activeTab === 'AM'
+            ? 'bg-aura-purple text-white shadow-lg shadow-aura-purple/50'
+            : 'bg-slate-800 text-gray-400 hover:text-white hover:bg-slate-700'
+            }`}
+        >
+          Morning (AM)
+        </button>
+        <button
+          onClick={() => setActiveTab('PM')}
+          className={`px-6 py-2 rounded-lg font-semibold transition-all ${activeTab === 'PM'
+            ? 'bg-aura-purple text-white shadow-lg shadow-aura-purple/50'
+            : 'bg-slate-800 text-gray-400 hover:text-white hover:bg-slate-700'
+            }`}
+        >
+          Evening (PM)
+        </button>
       </div>
 
       <ResponsiveContainer width="100%" height={300} className="sm:hidden">
@@ -176,51 +243,84 @@ export default function MoodChart() {
             labelStyle={{ color: "#fff" }}
             labelFormatter={getTooltipLabel}
             formatter={(value: any, name: any) => {
-              if (name === "Mood") return [value, "Mood"];
-              if (name === "Anxiety") return [value, "Anxiety"];
-              if (name === "Irritability") return [value, "Irritability"];
+              if (name.startsWith("Mood")) return [value, name];
+              if (name.startsWith("Anxiety")) return [value, name];
+              if (name.startsWith("Irritability")) return [value, name];
               if (name === "Sleep (AM)" || name === "Sleep (PM)") return [`${value}h`, name];
               return [value, name];
             }}
           />
 
-          {/* Mood Line */}
-          <Line
-            yAxisId="left"
-            type="monotone"
-            dataKey="mood"
-            stroke="#7c3aed"
-            strokeWidth={2}
-            dot={{ fill: "#7c3aed", r: 3 }}
-            connectNulls
-            name="Mood"
-          />
+          {/* Mood Lines conditionally rendered based on activeTab */}
+          {activeTab === 'AM' ? (
+            <>
+              <Line
+                yAxisId="left"
+                type="monotone"
+                dataKey="moodAM"
+                stroke="#7c3aed"
+                strokeWidth={2}
+                dot={{ fill: "#7c3aed", r: 3 }}
+                connectNulls
+                name="Mood"
+              />
+              <Line
+                yAxisId="left"
+                type="monotone"
+                dataKey="anxietyAM"
+                stroke="#ea580c"
+                strokeWidth={2}
+                dot={{ fill: "#ea580c", r: 3 }}
+                connectNulls
+                name="Anxiety"
+              />
+              <Line
+                yAxisId="left"
+                type="monotone"
+                dataKey="irritabilityAM"
+                stroke="#db2777"
+                strokeWidth={2}
+                dot={{ fill: "#db2777", r: 3 }}
+                connectNulls
+                name="Irritability"
+              />
+            </>
+          ) : (
+            <>
+              <Line
+                yAxisId="left"
+                type="monotone"
+                dataKey="moodPM"
+                stroke="#a855f7"
+                strokeWidth={2}
+                dot={{ fill: "#a855f7", r: 3 }}
+                connectNulls
+                name="Mood"
+              />
+              <Line
+                yAxisId="left"
+                type="monotone"
+                dataKey="anxietyPM"
+                stroke="#f97316"
+                strokeWidth={2}
+                dot={{ fill: "#f97316", r: 3 }}
+                connectNulls
+                name="Anxiety"
+              />
+              <Line
+                yAxisId="left"
+                type="monotone"
+                dataKey="irritabilityPM"
+                stroke="#f472b6"
+                strokeWidth={2}
+                dot={{ fill: "#f472b6", r: 3 }}
+                connectNulls
+                name="Irritability"
+              />
+            </>
+          )}
 
-          {/* Anxiety Line */}
-          <Line
-            yAxisId="left"
-            type="monotone"
-            dataKey="anxiety"
-            stroke="#06b6d4" // Cyan
-            strokeWidth={2}
-            dot={{ fill: "#06b6d4", r: 3 }}
-            connectNulls
-            name="Anxiety"
-          />
-
-          {/* Irritability Line */}
-          <Line
-            yAxisId="left"
-            type="monotone"
-            dataKey="irritability"
-            stroke="#ec4899" // Pink
-            strokeWidth={2}
-            dot={{ fill: "#ec4899", r: 3 }}
-            connectNulls
-            name="Irritability"
-          />
-
-          {/* Sleep Bars - AM */}
+          {/* Sleep Bars - AM (Cyan) - Hours 0-11 */}
           <Bar
             yAxisId="right"
             dataKey="sleepAM"
@@ -228,7 +328,7 @@ export default function MoodChart() {
             opacity={0.6}
             name="Sleep (AM)"
           />
-          {/* Sleep Bars - PM */}
+          {/* Sleep Bars - PM (Indigo) - Hours 12-23 */}
           <Bar
             yAxisId="right"
             dataKey="sleepPM"
@@ -285,12 +385,9 @@ export default function MoodChart() {
             labelStyle={{ color: "#fff" }}
             labelFormatter={getTooltipLabel}
             formatter={(value: any, name: any) => {
-              // Custom formatter to show weather data alongside line data?
-              // Recharts tooltip customization is tricky for non-series data.
-              // We'll stick to formatting the series values nicely.
-              if (name === "Mood Level") return [value, "Mood"];
-              if (name === "Anxiety Level") return [value, "Anxiety"];
-              if (name === "Irritability Level") return [value, "Irritability"];
+              if (name.startsWith("Mood")) return [value, name];
+              if (name.startsWith("Anxiety")) return [value, name];
+              if (name.startsWith("Irritability")) return [value, name];
               if (name === "Sleep Hours (AM)" || name === "Sleep Hours (PM)") return [`${value}h`, name];
               return [value, name];
             }}
@@ -322,41 +419,74 @@ export default function MoodChart() {
           />
           <Legend />
 
-          {/* Mood Line */}
-          <Line
-            yAxisId="left"
-            type="monotone"
-            dataKey="mood"
-            stroke="#7c3aed"
-            strokeWidth={3}
-            dot={{ fill: "#7c3aed", r: 5 }}
-            connectNulls
-            name="Mood Level"
-          />
-
-          {/* Anxiety Line */}
-          <Line
-            yAxisId="left"
-            type="monotone"
-            dataKey="anxiety"
-            stroke="#06b6d4" // Cyan
-            strokeWidth={2}
-            dot={{ fill: "#06b6d4", r: 4 }}
-            connectNulls
-            name="Anxiety Level"
-          />
-
-          {/* Irritability Line */}
-          <Line
-            yAxisId="left"
-            type="monotone"
-            dataKey="irritability"
-            stroke="#ec4899" // Pink
-            strokeWidth={2}
-            dot={{ fill: "#ec4899", r: 4 }}
-            connectNulls
-            name="Irritability Level"
-          />
+          {/* Mood Lines conditionally rendered based on activeTab */}
+          {activeTab === 'AM' ? (
+            <>
+              <Line
+                yAxisId="left"
+                type="monotone"
+                dataKey="moodAM"
+                stroke="#7c3aed"
+                strokeWidth={3}
+                dot={{ fill: "#7c3aed", r: 5 }}
+                connectNulls
+                name="Mood"
+              />
+              <Line
+                yAxisId="left"
+                type="monotone"
+                dataKey="anxietyAM"
+                stroke="#ea580c"
+                strokeWidth={2}
+                dot={{ fill: "#ea580c", r: 4 }}
+                connectNulls
+                name="Anxiety"
+              />
+              <Line
+                yAxisId="left"
+                type="monotone"
+                dataKey="irritabilityAM"
+                stroke="#db2777"
+                strokeWidth={2}
+                dot={{ fill: "#db2777", r: 4 }}
+                connectNulls
+                name="Irritability"
+              />
+            </>
+          ) : (
+            <>
+              <Line
+                yAxisId="left"
+                type="monotone"
+                dataKey="moodPM"
+                stroke="#a855f7"
+                strokeWidth={3}
+                dot={{ fill: "#a855f7", r: 5 }}
+                connectNulls
+                name="Mood"
+              />
+              <Line
+                yAxisId="left"
+                type="monotone"
+                dataKey="anxietyPM"
+                stroke="#f97316"
+                strokeWidth={2}
+                dot={{ fill: "#f97316", r: 4 }}
+                connectNulls
+                name="Anxiety"
+              />
+              <Line
+                yAxisId="left"
+                type="monotone"
+                dataKey="irritabilityPM"
+                stroke="#f472b6"
+                strokeWidth={2}
+                dot={{ fill: "#f472b6", r: 4 }}
+                connectNulls
+                name="Irritability"
+              />
+            </>
+          )}
 
           {/* Sleep Bars - AM */}
           <Bar
@@ -377,12 +507,7 @@ export default function MoodChart() {
         </ComposedChart>
       </ResponsiveContainer>
 
-      <div className="mt-3 sm:mt-4 flex items-center justify-center space-x-4 sm:space-x-6 text-xs sm:text-sm text-gray-400">
-        <div className="flex items-center space-x-1.5 sm:space-x-2">
-          <div className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-red-500"></div>
-          <span>Medication Missed</span>
-        </div>
-      </div>
+
     </div>
   );
 }

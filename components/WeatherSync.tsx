@@ -32,7 +32,7 @@ export default function WeatherSync() {
 
           // TODO: Call API endpoint instead of direct fetch
           const response = await fetch(
-            `/api/weather?lat=${latitude}&lon=${longitude}`
+            `/auramoods/api/weather?lat=${latitude}&lon=${longitude}`
           );
 
           if (!response.ok) {
@@ -51,9 +51,18 @@ export default function WeatherSync() {
         }
       },
       (err) => {
-        setError("Unable to retrieve your location");
+        let errorMessage = "Unable to retrieve your location";
+
+        // Check for secure context issue (common on LAN without HTTPS)
+        if (window.isSecureContext === false && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+          errorMessage = "Location requires HTTPS or Localhost. Browser blocked access.";
+        } else if (err.code === 1) {
+          errorMessage = "Location permission denied. Please enable in browser settings.";
+        }
+
+        setError(errorMessage);
         setLoading(false);
-        console.error(err);
+        console.error("Geolocation error:", err);
       }
     );
   };
