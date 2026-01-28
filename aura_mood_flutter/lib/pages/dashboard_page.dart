@@ -15,7 +15,7 @@ class DashboardPage extends ConsumerWidget {
       child: CustomScrollView(
         slivers: [
           SliverAppBar(
-            floating: true,
+            floating: false,
             backgroundColor: Colors.transparent,
             title: Row(
               mainAxisAlignment: MainAxisAlignment.center,

@@ -26,7 +26,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       child: CustomScrollView(
         slivers: [
           const SliverAppBar(
-            floating: true,
+            floating: false,
             backgroundColor: Colors.transparent,
             title: Text(
               'SETTINGS',
@@ -381,11 +381,15 @@ class _InfoRow extends StatelessWidget {
           label,
           style: Theme.of(context).textTheme.bodyMedium,
         ),
-        const Spacer(),
-        Text(
-          value,
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-            color: AppColors.textPrimary,
+        const SizedBox(width: 16),
+        Expanded(
+          child: Text(
+            value,
+            textAlign: TextAlign.end,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: AppColors.textPrimary,
+            ),
           ),
         ),
       ],

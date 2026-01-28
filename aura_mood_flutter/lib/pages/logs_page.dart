@@ -19,7 +19,7 @@ class LogsPage extends ConsumerWidget {
       child: CustomScrollView(
         slivers: [
           const SliverAppBar(
-            floating: true,
+            floating: false,
             backgroundColor: Colors.transparent,
             title: Text(
               'MOOD LOGS',

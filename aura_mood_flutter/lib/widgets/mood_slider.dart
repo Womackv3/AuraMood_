@@ -46,8 +46,8 @@ class _MoodSliderState extends State<MoodSlider> {
     return Color.lerp(widget.minColor, widget.maxColor, (widget.value - 1) / 9)!;
   }
 
-  void _handlePointer(Offset localPosition) {
-    final center = const Offset(_ringSize / 2, _ringSize / 2);
+  void _handlePointer(Offset localPosition, double size) {
+    final center = Offset(size / 2, size / 2);
     final dx = localPosition.dx - center.dx;
     final dy = localPosition.dy - center.dy;
 
@@ -82,62 +82,69 @@ class _MoodSliderState extends State<MoodSlider> {
           style: Theme.of(context).textTheme.labelLarge,
         ),
         const SizedBox(height: 8),
-        SizedBox(
-          width: _ringSize,
-          height: _ringSize,
-          child: RawGestureDetector(
-            gestures: <Type, GestureRecognizerFactory>{
-              _EagerPanGestureRecognizer:
-                  GestureRecognizerFactoryWithHandlers<_EagerPanGestureRecognizer>(
-                () => _EagerPanGestureRecognizer(),
-                (_EagerPanGestureRecognizer instance) {
-                  instance
-                    ..onStart = (details) {
-                      setState(() => _isDragging = true);
-                      _handlePointer(details.localPosition);
-                    }
-                    ..onUpdate = (details) {
-                      _handlePointer(details.localPosition);
-                    }
-                    ..onEnd = (_) {
-                      setState(() => _isDragging = false);
-                    };
+        LayoutBuilder(
+          builder: (context, constraints) {
+            // Use 120 as preferred size, but shrink if constrained
+            final size = math.min(constraints.maxWidth, _ringSize);
+            
+            return SizedBox(
+              width: size,
+              height: size,
+              child: RawGestureDetector(
+                gestures: <Type, GestureRecognizerFactory>{
+                  _EagerPanGestureRecognizer:
+                      GestureRecognizerFactoryWithHandlers<_EagerPanGestureRecognizer>(
+                    () => _EagerPanGestureRecognizer(),
+                    (_EagerPanGestureRecognizer instance) {
+                      instance
+                        ..onStart = (details) {
+                          setState(() => _isDragging = true);
+                          _handlePointer(details.localPosition, size);
+                        }
+                        ..onUpdate = (details) {
+                          _handlePointer(details.localPosition, size);
+                        }
+                        ..onEnd = (_) {
+                          setState(() => _isDragging = false);
+                        };
+                    },
+                  ),
                 },
-              ),
-            },
-            child: Container(
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: AppColors.glassBackground,
-                border: Border.all(color: AppColors.glassBorder),
-                boxShadow: [
-                  if (_isDragging)
-                    BoxShadow(
-                      color: _currentColor.withValues(alpha: 0.4),
-                      blurRadius: 30,
-                      spreadRadius: 8,
+                child: Container(
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: AppColors.glassBackground,
+                    border: Border.all(color: AppColors.glassBorder),
+                    boxShadow: [
+                      if (_isDragging)
+                        BoxShadow(
+                          color: _currentColor.withValues(alpha: 0.4),
+                          blurRadius: 30,
+                          spreadRadius: 8,
+                        ),
+                    ],
+                  ),
+                  child: CustomPaint(
+                    painter: _MoodRingPainter(
+                      value: widget.value,
+                      minColor: widget.minColor,
+                      maxColor: widget.maxColor,
                     ),
-                ],
-              ),
-              child: CustomPaint(
-                painter: _MoodRingPainter(
-                  value: widget.value,
-                  minColor: widget.minColor,
-                  maxColor: widget.maxColor,
-                ),
-                child: Center(
-                  child: Text(
-                    '${widget.value}',
-                    style: TextStyle(
-                      fontSize: 32,
-                      fontWeight: FontWeight.bold,
-                      color: _currentColor,
+                    child: Center(
+                      child: Text(
+                        '${widget.value}',
+                        style: TextStyle(
+                          fontSize: size * 0.26, // Scale text with size (32/120 ≈ 0.26)
+                          fontWeight: FontWeight.bold,
+                          color: _currentColor,
+                        ),
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
-          ),
+            );
+          },
         ),
       ],
     );

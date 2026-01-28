@@ -6,14 +6,24 @@ import 'package:http/http.dart' as http;
 class WeatherService {
   static const String _baseUrl = 'https://api.open-meteo.com/v1/forecast';
 
+  static bool _isRequesting = false;
+
   static Future<Map<String, dynamic>?> getCurrentWeather() async {
+    if (_isRequesting) {
+      debugPrint('Weather fetch already in progress, skipping...');
+      return null;
+    }
+    _isRequesting = true;
+
     try {
+      debugPrint('Checking location permission...');
       // Check and request location permission
       LocationPermission permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
+        debugPrint('Permission denied, requesting...');
         permission = await Geolocator.requestPermission();
         if (permission == LocationPermission.denied) {
-          debugPrint('Location permission denied');
+          debugPrint('Location permission denied after request');
           return null;
         }
       }
@@ -23,6 +33,7 @@ class WeatherService {
         return null;
       }
 
+      debugPrint('Getting current position...');
       // Get current position
       final position = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(
@@ -30,12 +41,14 @@ class WeatherService {
           timeLimit: Duration(seconds: 10),
         ),
       );
+      debugPrint('Position: ${position.latitude}, ${position.longitude}');
 
       // Fetch weather data from Open-Meteo (Fahrenheit)
       final url = Uri.parse(
         '$_baseUrl?latitude=${position.latitude}&longitude=${position.longitude}&current_weather=true&hourly=cloudcover,rain&temperature_unit=fahrenheit',
       );
-
+      
+      debugPrint('Fetching weather from API...');
       final response = await http.get(url);
 
       if (response.statusCode != 200) {
@@ -49,6 +62,8 @@ class WeatherService {
 
       // Get current hour index for hourly data
       final currentHour = DateTime.now().hour;
+      
+      debugPrint('Weather fetched successfully: ${currentWeather['temperature']}°F');
 
       return {
         'tempC': currentWeather['temperature']?.toDouble(),
@@ -59,16 +74,29 @@ class WeatherService {
     } catch (e) {
       debugPrint('Error fetching weather: $e');
       return null;
+    } finally {
+      _isRequesting = false;
     }
   }
 
   /// Fetch historical weather for a specific date/time using Open-Meteo archive API
   static Future<Map<String, dynamic>?> getHistoricalWeather(DateTime dateTime) async {
+    if (_isRequesting) {
+      debugPrint('Weather fetch already in progress (historical), skipping...');
+      return null;
+    }
+    _isRequesting = true;
+
     try {
+      debugPrint('Checking location permission (historical)...');
       LocationPermission permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
+        debugPrint('Permission denied (historical), requesting...');
         permission = await Geolocator.requestPermission();
-        if (permission == LocationPermission.denied) return null;
+        if (permission == LocationPermission.denied) {
+          debugPrint('Location permission denied (historical)');
+          return null;
+        }
       }
       if (permission == LocationPermission.deniedForever) return null;
 
@@ -118,6 +146,8 @@ class WeatherService {
     } catch (e) {
       debugPrint('Error fetching historical weather: $e');
       return null;
+    } finally {
+      _isRequesting = false;
     }
   }
 

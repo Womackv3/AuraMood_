@@ -226,9 +226,12 @@ class _MoodEntryCardState extends ConsumerState<MoodEntryCard> {
                 activeColor: AppColors.accent,
               ),
               const SizedBox(width: 8),
-              Text(
-                'Capture weather data',
-                style: Theme.of(context).textTheme.bodyMedium,
+              Expanded(
+                child: Text(
+                  'Capture weather data',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
               const SizedBox(width: 8),
               Icon(

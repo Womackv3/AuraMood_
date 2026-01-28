@@ -25,7 +25,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
       child: CustomScrollView(
         slivers: [
           const SliverAppBar(
-            floating: true,
+            floating: false,
             backgroundColor: Colors.transparent,
             title: Text(
               'ANALYTICS',
@@ -158,7 +158,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
                       const SizedBox(height: 8),
                       _LegendItem(color: AppColors.error, label: 'Irritability Level'),
                       const SizedBox(height: 8),
-                      _LegendItem(color: AppColors.secondary, label: 'Sleep Hours (bars)'),
+                      _LegendItem(color: AppColors.secondary, label: 'Sleep Hours'),
                     ],
                   ),
                 ),
@@ -187,10 +187,14 @@ class _MoodChart extends StatelessWidget {
     final moodSpots = <FlSpot>[];
     final anxietySpots = <FlSpot>[];
     final irritabilitySpots = <FlSpot>[];
+    // Sleep Data
+    final sleepSpots = <FlSpot>[];
     final sleepBars = <BarChartGroupData>[];
 
     for (var i = 0; i < reversedEntries.length; i++) {
       final entry = reversedEntries[i];
+      
+      // Mood Lines Data
       moodSpots.add(FlSpot(i.toDouble(), entry.moodLevel.toDouble()));
 
       if (entry.anxietyLevel != null) {
@@ -201,14 +205,16 @@ class _MoodChart extends StatelessWidget {
         irritabilitySpots.add(FlSpot(i.toDouble(), entry.irritabilityLevel!.toDouble()));
       }
 
+      // Sleep Data (Bar Visuals + Invisible Line for Touch)
       if (entry.sleepHours != null) {
+        sleepSpots.add(FlSpot(i.toDouble(), entry.sleepHours!));
         sleepBars.add(
           BarChartGroupData(
             x: i,
             barRods: [
               BarChartRodData(
                 toY: entry.sleepHours!,
-                color: AppColors.secondary.withValues(alpha: 0.25),
+                color: AppColors.secondary.withOpacity(0.3),
                 width: reversedEntries.length <= 7 ? 20 : (reversedEntries.length <= 30 ? 10 : 6),
                 borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
               ),
@@ -218,55 +224,59 @@ class _MoodChart extends StatelessWidget {
       }
     }
 
-    // Bottom axis interval
+    // Bottom axis scaling
     final bottomInterval = reversedEntries.length <= 7
         ? 1.0
         : (reversedEntries.length / 5).ceilToDouble();
 
     return Stack(
       children: [
-        // Bar chart for sleep (behind lines)
-        if (sleepBars.isNotEmpty)
-          BarChart(
-            BarChartData(
-              maxY: 12,
-              minY: 0,
-              barGroups: sleepBars,
-              alignment: BarChartAlignment.center,
-              groupsSpace: reversedEntries.length <= 7 ? 16 : 4,
-              titlesData: const FlTitlesData(show: false),
-              borderData: FlBorderData(show: false),
-              gridData: const FlGridData(show: false),
-              barTouchData: BarTouchData(
-                touchTooltipData: BarTouchTooltipData(
-                  getTooltipColor: (group) => AppColors.surface,
-                  getTooltipItem: (group, groupIndex, rod, rodIndex) {
-                    final idx = group.x;
-                    if (idx < 0 || idx >= reversedEntries.length) return null;
-                    final entry = reversedEntries[idx];
-                    final sleep = entry.sleepHours;
-                    if (sleep == null) return null;
-                    return BarTooltipItem(
-                      'Sleep: ${sleep.toStringAsFixed(1)}h',
-                      const TextStyle(
-                        color: AppColors.secondary,
-                        fontWeight: FontWeight.w500,
-                        fontSize: 12,
-                      ),
-                    );
-                  },
-                ),
+        // LAYER 1: Visual Sleep Bars (Non-interactive)
+        BarChart(
+          BarChartData(
+            minY: 0,
+            maxY: 12,
+            barGroups: sleepBars,
+            alignment: BarChartAlignment.center,
+            // Mirror the LineChart Titles exactly to force same drawing area
+            titlesData: FlTitlesData(
+              leftTitles: AxisTitles(
+                sideTitles: SideTitles(showTitles: true, reservedSize: 30, getTitlesWidget: (v, m) => const SizedBox()),
               ),
+              bottomTitles: AxisTitles(
+                 // Must reserve same space as LineChart bottom titles
+                sideTitles: SideTitles(showTitles: true, reservedSize: 40, getTitlesWidget: (v, m) => const SizedBox()),
+              ),
+              rightTitles: AxisTitles(
+                sideTitles: SideTitles(showTitles: true, reservedSize: 30, getTitlesWidget: (v, m) => const SizedBox()),
+              ),
+              topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
             ),
+            borderData: FlBorderData(show: false),
+            gridData: const FlGridData(show: false),
+            barTouchData: BarTouchData(enabled: false), // Disable touch on bars
           ),
-        // Line chart for mood metrics
+        ),
+
+        // LAYER 2: Interactive Lines + Invisible Sleep Line
         LineChart(
           LineChartData(
             minX: 0,
             maxX: maxX,
             minY: 0,
-            maxY: 10,
+            maxY: 12,
             lineBarsData: [
+              // 1. Invisible Sleep Line (for Touch detection)
+              if (sleepSpots.isNotEmpty)
+                LineChartBarData(
+                  spots: sleepSpots,
+                  color: Colors.transparent, // Invisible
+                  barWidth: 0,
+                  dotData: const FlDotData(show: false),
+                  belowBarData: BarAreaData(show: false),
+                ),
+
+              // 2. Mood Line
               LineChartBarData(
                 spots: moodSpots,
                 isCurved: reversedEntries.length > 2,
@@ -276,17 +286,15 @@ class _MoodChart extends StatelessWidget {
                 dotData: FlDotData(
                   show: true,
                   getDotPainter: (spot, percent, bar, index) => FlDotCirclePainter(
-                    radius: showDots ? 5 : 0,
+                    radius: 4,
                     color: AppColors.moodHigh,
                     strokeWidth: 2,
                     strokeColor: AppColors.surface,
                   ),
                 ),
-                belowBarData: BarAreaData(
-                  show: true,
-                  color: AppColors.moodHigh.withValues(alpha: 0.1),
-                ),
               ),
+
+              // 3. Anxiety Line
               if (anxietySpots.isNotEmpty)
                 LineChartBarData(
                   spots: anxietySpots,
@@ -297,7 +305,7 @@ class _MoodChart extends StatelessWidget {
                   dotData: FlDotData(
                     show: true,
                     getDotPainter: (spot, percent, bar, index) => FlDotCirclePainter(
-                      radius: showDots ? 4 : 0,
+                      radius: 3,
                       color: AppColors.warning,
                       strokeWidth: 2,
                       strokeColor: AppColors.surface,
@@ -305,6 +313,8 @@ class _MoodChart extends StatelessWidget {
                   ),
                   dashArray: [5, 5],
                 ),
+
+              // 4. Irritability Line
               if (irritabilitySpots.isNotEmpty)
                 LineChartBarData(
                   spots: irritabilitySpots,
@@ -315,7 +325,7 @@ class _MoodChart extends StatelessWidget {
                   dotData: FlDotData(
                     show: true,
                     getDotPainter: (spot, percent, bar, index) => FlDotCirclePainter(
-                      radius: showDots ? 4 : 0,
+                      radius: 3,
                       color: AppColors.error,
                       strokeWidth: 2,
                       strokeColor: AppColors.surface,
@@ -331,15 +341,10 @@ class _MoodChart extends StatelessWidget {
                   reservedSize: 30,
                   interval: 2,
                   getTitlesWidget: (value, meta) {
-                    if (value == meta.max || value == meta.min) {
-                      return const SizedBox();
-                    }
+                    if (value == meta.min || value > 10) return const SizedBox();
                     return Text(
                       value.toInt().toString(),
-                      style: const TextStyle(
-                        color: AppColors.textMuted,
-                        fontSize: 12,
-                      ),
+                      style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
                     );
                   },
                 ),
@@ -359,10 +364,7 @@ class _MoodChart extends StatelessWidget {
                           angle: -0.5,
                           child: Text(
                             DateFormat('M/d').format(date),
-                            style: const TextStyle(
-                              color: AppColors.textMuted,
-                              fontSize: 10,
-                            ),
+                            style: const TextStyle(color: AppColors.textMuted, fontSize: 10),
                           ),
                         ),
                       );
@@ -371,8 +373,25 @@ class _MoodChart extends StatelessWidget {
                   },
                 ),
               ),
+              rightTitles: AxisTitles(
+                sideTitles: SideTitles(
+                  showTitles: true,
+                  reservedSize: 30,
+                  interval: 4,
+                  getTitlesWidget: (value, meta) {
+                    if (value == meta.min) return const SizedBox();
+                    return Text(
+                      '${value.toInt()}h',
+                      style: const TextStyle(
+                        color: AppColors.secondary,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    );
+                  },
+                ),
+              ),
               topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-              rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
             ),
             gridData: FlGridData(
               show: true,
@@ -392,46 +411,44 @@ class _MoodChart extends StatelessWidget {
                 getTooltipItems: (touchedSpots) {
                   return touchedSpots.map((spot) {
                     final index = spot.x.toInt();
-                    if (index < 0 || index >= reversedEntries.length) {
-                      return null;
-                    }
+                    if (index < 0 || index >= reversedEntries.length) return null;
                     final entry = reversedEntries[index];
                     final weather = weatherMap[entry.id];
                     final date = DateFormat('M/d h:mm a').format(entry.timestamp);
 
                     String label;
                     Color color;
-                    switch (spot.barIndex) {
-                      case 0:
-                        label = 'Mood: ${spot.y.toInt()}';
-                        color = AppColors.moodHigh;
-                        break;
-                      case 1:
-                        label = 'Anxiety: ${spot.y.toInt()}';
-                        color = AppColors.warning;
-                        break;
-                      case 2:
-                        label = 'Irritability: ${spot.y.toInt()}';
-                        color = AppColors.error;
-                        break;
-                      default:
-                        label = '${spot.y.toInt()}';
-                        color = Colors.white;
+                    
+                    // Identify series based on barIndex or custom property logic
+                    // Index 0 is the Invisible Sleep Line
+                    if (spot.barIndex == 0) {
+                      label = 'Sleep: ${spot.y.toStringAsFixed(1)}h';
+                      color = AppColors.secondary;
+                    } else if (spot.bar.color == AppColors.moodHigh) {
+                      label = 'Mood: ${spot.y.toInt()}';
+                      color = AppColors.moodHigh;
+                    } else if (spot.bar.color == AppColors.warning) {
+                      label = 'Anxiety: ${spot.y.toInt()}';
+                      color = AppColors.warning;
+                    } else if (spot.bar.color == AppColors.error) {
+                      label = 'Irritability: ${spot.y.toInt()}';
+                      color = AppColors.error;
+                    } else {
+                      label = '${spot.y}';
+                      color = Colors.white;
                     }
 
-                    // Add weather + date info to the first line's tooltip
+                    // Add weather info to the first visible item in tooltip
                     String weatherInfo = '';
-                    if (spot.barIndex == 0) {
+                    if (touchedSpots.first == spot) {
                       if (weather != null) {
-                        final parts = <String>[];
-                        if (weather.tempC != null) parts.add('${weather.tempC!.round()}°F');
-                        if (weather.cloudCoverPct != null) parts.add('${weather.cloudCoverPct}% cloud');
-                        parts.add('${weather.rainMm?.toStringAsFixed(1) ?? '0.0'}mm rain');
-                        if (weather.moonPhase != null) parts.add(weather.moonPhase!);
-                        weatherInfo = '\n$date\n${parts.join(' · ')}';
-                      } else {
-                        weatherInfo = '\n$date';
-                      }
+                         final parts = <String>[];
+                         if (weather.tempC != null) parts.add('${weather.tempC!.round()}°F');
+                         parts.add('${weather.rainMm?.toStringAsFixed(1) ?? '0.0'}mm');
+                         weatherInfo = '\n$date\n${parts.join(' · ')}';
+                       } else {
+                         weatherInfo = '\n$date';
+                       }
                     }
 
                     return LineTooltipItem(
