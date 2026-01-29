@@ -8,6 +8,7 @@ import '../providers/database_provider.dart';
 import '../services/notification_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/glass_container.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({super.key});
@@ -17,8 +18,50 @@ class SettingsPage extends ConsumerStatefulWidget {
 }
 
 class _SettingsPageState extends ConsumerState<SettingsPage> {
-  bool _notificationsEnabled = false;
-  bool _moodReminderEnabled = false;
+  bool _notificationsEnabled = false; // For Meds
+  
+  // Mood Reminder State
+  bool _amReminderEnabled = false;
+  TimeOfDay _amReminderTime = const TimeOfDay(hour: 9, minute: 0);
+  
+  bool _pmReminderEnabled = false;
+  TimeOfDay _pmReminderTime = const TimeOfDay(hour: 20, minute: 0);
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSettings();
+  }
+
+  Future<void> _loadSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _notificationsEnabled = prefs.getBool('med_notifications') ?? false;
+      _amReminderEnabled = prefs.getBool('am_reminder') ?? false;
+      _pmReminderEnabled = prefs.getBool('pm_reminder') ?? false;
+      
+      final amHour = prefs.getInt('am_hour') ?? 9;
+      final amMinute = prefs.getInt('am_minute') ?? 0;
+      _amReminderTime = TimeOfDay(hour: amHour, minute: amMinute);
+
+      final pmHour = prefs.getInt('pm_hour') ?? 20;
+      final pmMinute = prefs.getInt('pm_minute') ?? 0;
+      _pmReminderTime = TimeOfDay(hour: pmHour, minute: pmMinute);
+    });
+  }
+
+  Future<void> _saveSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('med_notifications', _notificationsEnabled);
+    await prefs.setBool('am_reminder', _amReminderEnabled);
+    await prefs.setBool('pm_reminder', _pmReminderEnabled);
+    
+    await prefs.setInt('am_hour', _amReminderTime.hour);
+    await prefs.setInt('am_minute', _amReminderTime.minute);
+    
+    await prefs.setInt('pm_hour', _pmReminderTime.hour);
+    await prefs.setInt('pm_minute', _pmReminderTime.minute);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -67,29 +110,95 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                         value: _notificationsEnabled,
                         onChanged: (value) async {
                           setState(() => _notificationsEnabled = value);
+                          _saveSettings();
                           if (value) {
                             await _scheduleMedReminders();
                           } else {
                             await NotificationService.cancelAll();
+                            // Re-schedule mood reminders if they shouldn't be cancelled by this global kill switch
+                            // Ideally cancelAllMedicationReminders should exist, but for now we rebuild.
+                            if (_amReminderEnabled) NotificationService.scheduleAmMoodReminder(_amReminderTime);
+                            if (_pmReminderEnabled) NotificationService.schedulePmMoodReminder(_pmReminderTime);
                           }
                         },
                         activeColor: AppColors.accent,
                       ),
+                      
+                      const Divider(color: AppColors.glassBorder),
+                      
+                      // AM Reminder Section
                       SwitchListTile(
                         contentPadding: EdgeInsets.zero,
-                        title: const Text('Mood Check-in Reminder'),
-                        subtitle: const Text('Daily reminder to log your mood'),
-                        value: _moodReminderEnabled,
+                        title: const Text('Morning Check-in'),
+                        subtitle: Text(_formatTime(_amReminderTime)),
+                        value: _amReminderEnabled,
                         onChanged: (value) async {
-                          setState(() => _moodReminderEnabled = value);
+                          setState(() => _amReminderEnabled = value);
+                          _saveSettings();
                           if (value) {
-                            await NotificationService.scheduleMoodReminder();
+                            await NotificationService.scheduleAmMoodReminder(_amReminderTime);
                           } else {
-                            await NotificationService.cancelMoodReminder();
+                            await NotificationService.cancelAmMoodReminder();
                           }
                         },
                         activeColor: AppColors.accent,
                       ),
+                      if (_amReminderEnabled)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 16, bottom: 8),
+                          child: TextButton(
+                            onPressed: () async {
+                              final time = await showTimePicker(
+                                context: context,
+                                initialTime: _amReminderTime,
+                              );
+                              if (time != null) {
+                                setState(() => _amReminderTime = time);
+                                _saveSettings();
+                                await NotificationService.scheduleAmMoodReminder(time);
+                              }
+                            },
+                            child: const Text('Change Time'),
+                          ),
+                        ),
+
+                      const Divider(color: AppColors.glassBorder),
+
+                      // PM Reminder Section
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Evening Check-in'),
+                        subtitle: Text(_formatTime(_pmReminderTime)),
+                        value: _pmReminderEnabled,
+                        onChanged: (value) async {
+                          setState(() => _pmReminderEnabled = value);
+                          _saveSettings();
+                          if (value) {
+                            await NotificationService.schedulePmMoodReminder(_pmReminderTime);
+                          } else {
+                            await NotificationService.cancelPmMoodReminder();
+                          }
+                        },
+                        activeColor: AppColors.accent,
+                      ),
+                       if (_pmReminderEnabled)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 16, bottom: 8),
+                          child: TextButton(
+                            onPressed: () async {
+                              final time = await showTimePicker(
+                                context: context,
+                                initialTime: _pmReminderTime,
+                              );
+                              if (time != null) {
+                                setState(() => _pmReminderTime = time);
+                                _saveSettings();
+                                await NotificationService.schedulePmMoodReminder(time);
+                              }
+                            },
+                            child: const Text('Change Time'),
+                          ),
+                        ),
                       const Divider(color: AppColors.glassBorder),
                       const SizedBox(height: 8),
                       SizedBox(
@@ -357,6 +466,12 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         ],
       ),
     );
+  }
+
+  String _formatTime(TimeOfDay time) {
+    final now = DateTime.now();
+    final dt = DateTime(now.year, now.month, now.day, time.hour, time.minute);
+    return DateFormat.jm().format(dt);
   }
 }
 

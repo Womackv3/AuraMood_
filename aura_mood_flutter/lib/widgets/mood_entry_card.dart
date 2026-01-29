@@ -7,6 +7,7 @@ import '../theme/app_theme.dart';
 import '../services/weather_service.dart';
 import 'glass_container.dart';
 import 'mood_slider.dart';
+import 'sleep_dial.dart';
 
 class MoodEntryCard extends ConsumerStatefulWidget {
   const MoodEntryCard({super.key});
@@ -195,7 +196,7 @@ class _MoodEntryCardState extends ConsumerState<MoodEntryCard> {
               ),
               const SizedBox(width: 16),
               Expanded(
-                child: _SleepSlider(
+                child: SleepDial(
                   value: _sleepHours,
                   onChanged: (v) => setState(() => _sleepHours = v),
                 ),
@@ -265,63 +266,4 @@ class _MoodEntryCardState extends ConsumerState<MoodEntryCard> {
   }
 }
 
-class _SleepSlider extends StatelessWidget {
-  final double value;
-  final ValueChanged<double> onChanged;
 
-  const _SleepSlider({
-    required this.value,
-    required this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Text(
-          'Sleep',
-          style: Theme.of(context).textTheme.labelLarge,
-        ),
-        const SizedBox(height: 8),
-        Container(
-          height: 120,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          decoration: BoxDecoration(
-            color: AppColors.glassBackground,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppColors.glassBorder),
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                '${value.toStringAsFixed(1)}h',
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: Color.lerp(AppColors.error, AppColors.success, value / 12),
-                ),
-              ),
-              SliderTheme(
-                data: SliderThemeData(
-                  activeTrackColor: AppColors.secondary,
-                  inactiveTrackColor: AppColors.glassBorder,
-                  thumbColor: AppColors.secondary,
-                  overlayColor: AppColors.secondary.withOpacity(0.2),
-                ),
-                child: Slider(
-                  value: value,
-                  min: 0,
-                  max: 12,
-                  divisions: 24,
-                  onChanged: onChanged,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}

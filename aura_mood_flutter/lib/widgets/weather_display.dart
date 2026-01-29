@@ -52,7 +52,30 @@ class WeatherDisplay extends ConsumerWidget {
         ),
       ),
       data: (weather) {
-        if (weather == null) return const SizedBox.shrink();
+        if (weather == null) {
+            // Weather service returns null on permission denied or error.
+            // Show a prompt instead of disappearing.
+            return GlassContainer(
+                margin: const EdgeInsets.only(bottom: 16),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                child: Row(
+                    children: [
+                        const Icon(Icons.location_off_outlined, color: AppColors.textMuted, size: 20),
+                        const SizedBox(width: 12),
+                        const Expanded(
+                            child: Text(
+                                'Location needed for weather.',
+                                style: TextStyle(color: AppColors.textMuted),
+                            ),
+                        ),
+                        TextButton(
+                            onPressed: () => ref.refresh(weatherProvider),
+                            child: const Text('Retry'),
+                        ),
+                    ],
+                ),
+            );
+        }
 
         final tempC = weather['tempC'] as double?;
         final cloudCoverPct = weather['cloudCoverPct'] as int?;

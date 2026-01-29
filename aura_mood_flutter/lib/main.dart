@@ -10,9 +10,13 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Initialize local notifications (non-blocking — don't prevent app launch)
-  NotificationService.initialize().catchError((e) {
-    debugPrint('Notification init failed: $e');
-  });
+  // Initialize local notifications
+  try {
+    await NotificationService.initialize();
+    await NotificationService.requestPermissions();
+  } catch (e) {
+    debugPrint('Notification init/permission failed: $e');
+  }
 
   // Set system UI overlay style for dark theme
   SystemChrome.setSystemUIOverlayStyle(

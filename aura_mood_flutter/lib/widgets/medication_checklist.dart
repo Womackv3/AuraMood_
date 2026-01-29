@@ -43,7 +43,7 @@ class _MedicationChecklistState extends ConsumerState<MedicationChecklist> {
                 style: Theme.of(context).textTheme.titleLarge,
               ),
               IconButton(
-                onPressed: () => _showAddMedicationDialog(context),
+                onPressed: () => _showMedicationDialog(context),
                 icon: const Icon(Icons.add_circle_outline),
                 color: AppColors.accent,
               ),
@@ -70,7 +70,7 @@ class _MedicationChecklistState extends ConsumerState<MedicationChecklist> {
                         ),
                         const SizedBox(height: 8),
                         TextButton.icon(
-                          onPressed: () => _showAddMedicationDialog(context),
+                onPressed: () => _showMedicationDialog(context),
                           icon: const Icon(Icons.add, size: 18),
                           label: const Text('Add Medication'),
                         ),
@@ -93,6 +93,7 @@ class _MedicationChecklistState extends ConsumerState<MedicationChecklist> {
                     medication: med,
                     isTaken: isTaken,
                     onTap: () => _toggleMedication(med, isTaken),
+                    onEdit: () => _showMedicationDialog(context, med: med),
                     onDelete: () => _deleteMedication(med),
                   );
                 },
@@ -163,17 +164,26 @@ class _MedicationChecklistState extends ConsumerState<MedicationChecklist> {
     }
   }
 
-  void _showAddMedicationDialog(BuildContext context) {
-    final nameController = TextEditingController();
-    final dosageController = TextEditingController();
+  // Unified Dialog for Add and Edit
+  void _showMedicationDialog(BuildContext context, {Medication? med}) {
+    final isEditing = med != null;
+    final nameController = TextEditingController(text: med?.name ?? '');
+    final dosageController = TextEditingController(text: med?.dosage ?? '');
     TimeOfDay? selectedTime;
+
+    if (med?.scheduleTime != null) {
+      try {
+        final parts = med!.scheduleTime!.split(':');
+        selectedTime = TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1]));
+      } catch (_) {}
+    }
 
     showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
           backgroundColor: AppColors.surface,
-          title: const Text('Add Medication'),
+          title: Text(isEditing ? 'Edit Medication' : 'Add Medication'),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -184,7 +194,8 @@ class _MedicationChecklistState extends ConsumerState<MedicationChecklist> {
                     labelText: 'Medication Name',
                     hintText: 'e.g., Lithium',
                   ),
-                  autofocus: true,
+                  autofocus: !isEditing,
+                  textCapitalization: TextCapitalization.sentences,
                 ),
                 const SizedBox(height: 16),
                 TextField(
@@ -203,7 +214,17 @@ class _MedicationChecklistState extends ConsumerState<MedicationChecklist> {
                         ? selectedTime!.format(context)
                         : 'Not set',
                   ),
-                  trailing: const Icon(Icons.access_time),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (selectedTime != null)
+                        IconButton(
+                          icon: const Icon(Icons.close, size: 20),
+                          onPressed: () => setDialogState(() => selectedTime = null),
+                        ),
+                      const Icon(Icons.access_time),
+                    ],
+                  ),
                   onTap: () async {
                     final time = await showTimePicker(
                       context: context,
@@ -234,6 +255,10 @@ class _MedicationChecklistState extends ConsumerState<MedicationChecklist> {
                   return;
                 }
 
+                // Force close logic - ensure we pop first to avoid any blocking
+                // However, we need context for DB. 
+                // Let's capture values and pop at the end.
+                
                 final database = ref.read(databaseProvider);
                 String? scheduleTime;
                 if (selectedTime != null) {
@@ -243,29 +268,56 @@ class _MedicationChecklistState extends ConsumerState<MedicationChecklist> {
                 final medName = nameController.text.trim();
                 final medDosage = dosageController.text.trim().isEmpty ? null : dosageController.text.trim();
 
-                await database.insertMedication(
-                  MedicationsCompanion.insert(
-                    name: medName,
-                    dosage: Value(medDosage),
-                    scheduleTime: Value(scheduleTime),
-                  ),
-                );
-
-                // Schedule notification if a time was set
-                if (selectedTime != null) {
-                  await NotificationService.scheduleMedicationReminder(
-                    medicationId: medName.hashCode.toString(),
-                    medicationName: medName,
-                    dosage: medDosage,
-                    time: selectedTime!,
+                if (isEditing) {
+                  // Update existing
+                  await database.updateMedication(
+                    MedicationsCompanion(
+                      id: Value(med!.id),
+                      name: Value(medName),
+                      dosage: Value(medDosage),
+                      scheduleTime: Value(scheduleTime),
+                    ),
                   );
+                  // Reschedule notification
+                  try {
+                    await NotificationService.cancelMedicationReminder(med.id);
+                  } catch (e) {
+                    debugPrint('Error canceling reminder: $e');
+                  }
+                } else {
+                  // Insert new
+                  await database.insertMedication(
+                    MedicationsCompanion.insert(
+                      name: medName,
+                      dosage: Value(medDosage),
+                      scheduleTime: Value(scheduleTime),
+                    ),
+                  );
+                }
+
+                if (selectedTime != null) {
+                   try {
+                     await NotificationService.scheduleMedicationReminder(
+                      medicationId: isEditing ? med.id : medName.hashCode.toString(),
+                      medicationName: medName,
+                      dosage: medDosage,
+                      time: selectedTime!,
+                    );
+                   } catch (e) {
+                     debugPrint('Error scheduling reminder: $e');
+                     if (context.mounted) {
+                       ScaffoldMessenger.of(context).showSnackBar(
+                         SnackBar(content: Text('Saved, but failed to schedule notification: $e')),
+                       );
+                     }
+                   }
                 }
 
                 if (context.mounted) {
                   Navigator.pop(context);
                 }
               },
-              child: const Text('Add'),
+              child: Text(isEditing ? 'Save' : 'Add'),
             ),
           ],
         ),
@@ -278,119 +330,98 @@ class _MedicationTile extends StatelessWidget {
   final Medication medication;
   final bool isTaken;
   final VoidCallback onTap;
+  final VoidCallback onEdit;
   final VoidCallback onDelete;
 
   const _MedicationTile({
     required this.medication,
     required this.isTaken,
     required this.onTap,
+    required this.onEdit,
     required this.onDelete,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Dismissible(
-      key: Key(medication.id),
-      direction: DismissDirection.endToStart,
-      background: Container(
-        alignment: Alignment.centerRight,
-        padding: const EdgeInsets.only(right: 16),
+    return GestureDetector(
+      onTap: onTap,
+      onLongPress: onEdit, // Quick edit
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: AppColors.error.withOpacity(0.2),
+          color: isTaken
+              ? AppColors.success.withOpacity(0.15)
+              : AppColors.glassBackground,
           borderRadius: BorderRadius.circular(12),
-        ),
-        child: const Icon(Icons.delete_outline, color: AppColors.error),
-      ),
-      confirmDismiss: (_) async {
-        onDelete();
-        return false;
-      },
-      child: GestureDetector(
-        onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: isTaken
-                ? AppColors.success.withOpacity(0.15)
-                : AppColors.glassBackground,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: isTaken ? AppColors.success : AppColors.glassBorder,
-              width: isTaken ? 2 : 1,
-            ),
+          border: Border.all(
+            color: isTaken ? AppColors.success : AppColors.glassBorder,
+            width: isTaken ? 2 : 1,
           ),
-          child: Row(
-            children: [
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                width: 28,
-                height: 28,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: isTaken ? AppColors.success : Colors.transparent,
-                  border: Border.all(
-                    color: isTaken ? AppColors.success : AppColors.textMuted,
-                    width: 2,
-                  ),
+        ),
+        child: Row(
+          children: [
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              width: 28,
+              height: 28,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: isTaken ? AppColors.success : Colors.transparent,
+                border: Border.all(
+                  color: isTaken ? AppColors.success : AppColors.textMuted,
+                  width: 2,
                 ),
-                child: isTaken
-                    ? const Icon(Icons.check, size: 18, color: Colors.white)
-                    : null,
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      medication.name,
-                      style: TextStyle(
-                        fontWeight: FontWeight.w500,
-                        color: isTaken ? AppColors.success : AppColors.textPrimary,
-                        decoration: isTaken ? TextDecoration.lineThrough : null,
-                      ),
+              child: isTaken
+                  ? const Icon(Icons.check, size: 18, color: Colors.white)
+                  : null,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    medication.name,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w500,
+                      color: isTaken ? AppColors.success : AppColors.textPrimary,
+                      decoration: isTaken ? TextDecoration.lineThrough : null,
                     ),
-                    if (medication.dosage != null) ...[
-                      const SizedBox(height: 2),
-                      Text(
-                        medication.dosage!,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: AppColors.textMuted,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              if (medication.scheduleTime != null)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: AppColors.glassBackground,
-                    borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.access_time,
-                        size: 14,
+                  if (medication.dosage != null) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      medication.dosage!,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                         color: AppColors.textMuted,
                       ),
-                      const SizedBox(width: 4),
-                      Text(
-                        _formatTime(medication.scheduleTime!),
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: AppColors.textMuted,
-                        ),
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            // Actions Menu
+            PopupMenuButton<String>(
+              icon: Icon(Icons.more_vert, size: 20, color: AppColors.textMuted),
+              color: AppColors.surface,
+              onSelected: (value) {
+                if (value == 'edit') onEdit();
+                if (value == 'delete') onDelete();
+              },
+              itemBuilder: (context) => [
+                const PopupMenuItem(
+                  value: 'edit',
+                  child: Row(children: [Icon(Icons.edit, size: 18), SizedBox(width: 8), Text('Edit')]),
                 ),
-            ],
-          ),
+                PopupMenuItem(
+                  value: 'delete',
+                  child: Row(children: [Icon(Icons.delete, size: 18, color: AppColors.error), SizedBox(width: 8), Text('Delete', style: TextStyle(color: AppColors.error))]),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );
